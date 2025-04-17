@@ -11,6 +11,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const resetYesButton = document.getElementById("reset-yes");
   const resetNoButton = document.getElementById("reset-no");
 
+  const encouragingMessages = [
+    "Great job!",
+    "You're making progress!",
+    "Keep going!",
+    "I believe in you!",
+    "That's wonderful!",
+    "You're doing great!",
+    "One step at a time!",
+    "You got this!",
+    "Proud of you!",
+    "Nice work!"
+  ];
+
   // for controlling when hovers are active
   let hoverListeners = [];
 
@@ -258,6 +271,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     return array;
   }
+  function getRandomMessage() {
+    const randomIndex = Math.floor(Math.random() * encouragingMessages.length);
+    return encouragingMessages[randomIndex];
+  }
 
   // Function to hide hover circles
   function hideHoverCircles() {
@@ -274,6 +291,51 @@ document.addEventListener("DOMContentLoaded", () => {
       circle.classList.remove("hidden");
     });
   }
+  function showSpeechBubble(category) {
+    let bubblePosition;
+
+    switch (category) {
+      case 'daily':
+        bubblePosition = { top: 450, left: 1150 };
+        break;
+      case 'home':
+        bubblePosition = { top: 650, left: 1080 };
+        break;
+      case 'pet':
+        bubblePosition = { top: 650, left: 1100 };
+        break;
+      case 'friends':
+        bubblePosition = { top: 700, left: 950 };
+        break;
+      case 'mind':
+        bubblePosition = { top: 700, left: 1050 };
+        break;
+      case 'others':
+        bubblePosition = { top: 700, left: 1000 };
+        break;
+      default:
+        bubblePosition = { top: 700, left: 1000 };
+    }
+
+    const speechBubble = document.createElement("div");
+    speechBubble.className = "speech-bubble";
+    speechBubble.textContent = getRandomMessage();
+
+    speechBubble.style.left = `${bubblePosition.left}px`;
+    speechBubble.style.top = `${bubblePosition.top}px`;
+    document.body.appendChild(speechBubble);
+    setTimeout(() => {
+      speechBubble.classList.add("active");
+    }, 10);
+
+    setTimeout(() => {
+      speechBubble.classList.remove("active");
+      setTimeout(() => {
+        speechBubble.remove();
+      }, 500);
+    }, 3000);
+  }
+
 
   // Updated hardcoded tasks with new categories and random selection
   const taskPool = {
@@ -381,7 +443,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (isFinalImage) {
         changeBackgroundWithSlide(
           backgroundSets[selectedCategory][
-            backgroundSets[selectedCategory].length - 1
+          backgroundSets[selectedCategory].length - 1
           ]
         ).then(() => {
           tasksContainer.classList.add("hidden");
@@ -618,7 +680,83 @@ document.addEventListener("DOMContentLoaded", () => {
       return a.completed ? -1 : 1;
     });
   }
+  function saveMood(mood) {
+    chrome.storage.local.get("state", (data) => {
+      if (data.state) {
+        const newState = {
+          ...data.state,
+          selectedMood: mood
+        };
 
+        chrome.storage.local.set({
+          state: newState
+        });
+      }
+    });
+  }
+
+  function createMoodSelector() {
+    const moodOptions = [
+      { emoji: "😊", name: "Happy", value: "happy" },
+      { emoji: "😐", name: "Neutral", value: "neutral" },
+      { emoji: "😓", name: "Stressed", value: "stressed" },
+      { emoji: "😔", name: "Sad", value: "sad" },
+      { emoji: "😡", name: "Angry", value: "angry" }
+    ];
+
+    const moodSelector = document.createElement("div");
+    moodSelector.className = "mood-selector";
+
+    moodOptions.forEach(option => {
+      const moodContainer = document.createElement("div");
+      moodContainer.className = "mood-container";
+
+      const moodButton = document.createElement("div");
+      moodButton.className = "mood-option";
+      moodButton.textContent = option.emoji;
+      moodButton.dataset.mood = option.value;
+
+      const moodLabel = document.createElement("div");
+      moodLabel.className = "mood-label";
+      moodLabel.textContent = option.name;
+
+      moodButton.appendChild(moodLabel);
+      moodContainer.appendChild(moodButton);
+      moodSelector.appendChild(moodContainer);
+
+      moodButton.addEventListener("click", () => {
+        document.querySelectorAll(".mood-option").forEach(btn => {
+          btn.classList.remove("selected");
+        });
+        moodButton.classList.add("selected");
+        saveMood(option.value);
+        updateCurrentMoodDisplay(option.emoji, option.name);
+      });
+    });
+
+    return moodSelector;
+  }
+
+
+  function updateCurrentMoodDisplay(emoji, name) {
+    let currentMoodDisplay = document.querySelector(".current-mood");
+
+    if (!currentMoodDisplay) {
+      currentMoodDisplay = document.createElement("div");
+      currentMoodDisplay.className = "current-mood";
+
+      const taskSubtitle = document.querySelector(".task-subtitle");
+      if (taskSubtitle) {
+        taskSubtitle.insertAdjacentElement('afterend', currentMoodDisplay);
+      } else {
+        document.getElementById("tasks-header").appendChild(currentMoodDisplay);
+      }
+    }
+
+    currentMoodDisplay.innerHTML = `
+      Today's mood: <span class="current-mood-emoji">${emoji}</span> ${name}
+    `;
+  }
   function renderTasks(tasks, backgroundIndex, category) {
     const tasksHeader =
       document.getElementById("tasks-header") || document.createElement("div");
@@ -627,7 +765,35 @@ document.addEventListener("DOMContentLoaded", () => {
       <h1 class="task-title">today's list</h1>
       <p class="task-subtitle">some tasks to help you feel good</p>
     `;
+    if (!document.querySelector(".mood-selector")) {
+      tasksContainer.style.position = "relative";
 
+      const moodSelector = createMoodSelector();
+      tasksContainer.appendChild(moodSelector);
+
+      chrome.storage.local.get("state", (data) => {
+        if (data.state && data.state.selectedMood) {
+          const moodOptions = [
+            { emoji: "😊", name: "Happy", value: "happy" },
+            { emoji: "😐", name: "Neutral", value: "neutral" },
+            { emoji: "😓", name: "Stressed", value: "stressed" },
+            { emoji: "😔", name: "Sad", value: "sad" },
+            { emoji: "😡", name: "Angry", value: "angry" }
+          ];
+
+          const selectedMood = moodOptions.find(m => m.value === data.state.selectedMood);
+
+          if (selectedMood) {
+            const moodButton = document.querySelector(`.mood-option[data-mood="${selectedMood.value}"]`);
+            if (moodButton) {
+              moodButton.classList.add("selected");
+            }
+
+            updateCurrentMoodDisplay(selectedMood.emoji, selectedMood.name);
+          }
+        }
+      });
+    }
     if (!document.getElementById("tasks-header")) {
       tasksContainer.innerHTML = "";
       tasksContainer.appendChild(tasksHeader);
@@ -647,13 +813,11 @@ document.addEventListener("DOMContentLoaded", () => {
       taskItem.classList.add("draggable");
       taskItem.innerHTML = `
         <input type="checkbox" ${task.completed ? "checked" : ""} />
-        <div class="task-text" contenteditable="true" placeholder="New task">${
-          task.text
+        <div class="task-text" contenteditable="true" placeholder="New task">${task.text
         }</div>
-        ${
-          task.text && !task.completed
-            ? `<button class="delete-task"></button>`
-            : ""
+        ${task.text && !task.completed
+          ? `<button class="delete-task"></button>`
+          : ""
         }
         <div class="drag-handle">
          <div class="line"></div>
@@ -673,6 +837,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (tasks[originalIndex].completed) {
           const deleteButton = taskItem.querySelector(".delete-task");
           if (deleteButton) deleteButton.remove();
+          if (checkbox.checked && task.text.trim() !== "") {
+            showSpeechBubble(category);
+          }
         }
 
         let newPosition = 0;
