@@ -11,6 +11,162 @@ document.addEventListener("DOMContentLoaded", () => {
   const resetYesButton = document.getElementById("reset-yes");
   const resetNoButton = document.getElementById("reset-no");
 
+  function createMoodWidget() {
+    if (document.getElementById('mood-widget')) {
+      return;
+    }
+
+    const moodWidget = document.createElement('div');
+    moodWidget.id = 'mood-widget';
+    moodWidget.className = 'mood-widget';
+
+    const title = document.createElement('div');
+    title.className = 'mood-title';
+    title.textContent = "How are you feeling today?";
+    moodWidget.appendChild(title);
+
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'mood-options';
+
+    const moods = [
+      { emoji: "😊", name: "Happy", value: "happy" },
+      { emoji: "😐", name: "Neutral", value: "neutral" },
+      { emoji: "😓", name: "Stressed", value: "stressed" },
+      { emoji: "😔", name: "Sad", value: "sad" },
+      { emoji: "😡", name: "Angry", value: "angry" }
+    ];
+
+    moods.forEach(mood => {
+      const option = document.createElement('div');
+      option.className = 'mood-option';
+      option.dataset.mood = mood.value;
+      option.innerHTML = mood.emoji;
+
+      const label = document.createElement('div');
+      label.className = 'mood-label';
+      label.textContent = mood.name;
+      option.appendChild(label);
+
+      option.addEventListener('click', () => {
+        document.querySelectorAll('.mood-option').forEach(el => {
+          el.classList.remove('selected');
+        });
+
+        option.classList.add('selected');
+
+        saveMoodIndependently(mood.value);
+      });
+
+      optionsContainer.appendChild(option);
+    });
+
+    moodWidget.appendChild(optionsContainer);
+    document.body.appendChild(moodWidget);
+
+    chrome.storage.local.get("userMood", (data) => {
+      if (data.userMood) {
+        const selectedOption = document.querySelector(`.mood-option[data-mood="${data.userMood}"]`);
+        if (selectedOption) {
+          selectedOption.classList.add('selected');
+        }
+      }
+    });
+
+    const style = document.createElement('style');
+    style.textContent = `
+      .mood-widget {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(5px);
+        border-radius: 20px;
+        padding: 10px;
+        z-index: 2000;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+      }
+
+      .mood-title {
+        font-size: 14px;
+        margin-bottom: 8px;
+        color: #333;
+        text-align: center;
+      }
+
+      .mood-options {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+      }
+
+      .mood-option {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        cursor: pointer;
+        background: white;
+        border-radius: 50%;
+        transition: all 0.2s;
+        position: relative;
+        border: 2px solid transparent;
+      }
+
+      .mood-option:hover {
+        transform: scale(1.1);
+      }
+
+      .mood-option.selected {
+        border-color: #0c9623;
+        box-shadow: 0 0 5px rgba(12, 150, 35, 0.3);
+      }
+
+      .mood-label {
+        position: absolute;
+        top: 40px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+
+      .mood-option:hover .mood-label {
+        opacity: 1;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function saveMoodIndependently(mood) {
+    chrome.storage.local.set({
+      userMood: mood
+    });
+  }
+  createMoodWidget();
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'childList' &&
+        mutation.removedNodes.length > 0 &&
+        !document.getElementById('mood-widget')) {
+        createMoodWidget();
+        break;
+      }
+    }
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+
   const encouragingMessages = [
     "Great job!",
     "You're making progress!",
@@ -561,73 +717,39 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Reset everything when "Yes" is clicked
+  function forceResetToInitialState() {
+    chrome.storage.local.clear(() => {
+
+      const thankYouMessage = document.querySelector(".thank-you-message");
+      if (thankYouMessage) thankYouMessage.remove();
+
+      const moodWidget = document.getElementById('mood-widget');
+      if (moodWidget) moodWidget.remove();
+
+      const speechBubbles = document.querySelectorAll(".speech-bubble");
+      speechBubbles.forEach(bubble => bubble.remove());
+
+      tasksContainer.classList.add("hidden");
+      categoriesContainer.classList.remove("hidden");
+
+      const welcomeMessage = document.getElementById("welcome-message");
+      if (welcomeMessage) welcomeMessage.classList.remove("hidden");
+
+      const deerCircles = document.querySelectorAll(".deer-circle");
+      deerCircles.forEach(circle => {
+        circle.classList.remove("hidden");
+      });
+
+      changeBackgroundWithSlide(initialBackground);
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+    });
+  }
+
   resetYesButton.addEventListener("click", () => {
-    // Clear the state in chrome.storage.local
-    chrome.storage.local.set({ state: null }, () => {
-      console.log("State reset to initial state.");
-    });
-
-    // Reset the UI to the initial state
-    tasksContainer.classList.add("hidden");
-    document.getElementById("welcome-message").classList.remove("hidden");
-    changeBackgroundWithSlide(initialBackground);
-
-    // Remove thank you message if it exists
-    const thankYouMessage = document.querySelector(".thank-you-message");
-    if (thankYouMessage) {
-      thankYouMessage.remove();
-    }
-
-    // Reattach hover listeners
-    deerAreas.forEach((area) => {
-      const circle = document.getElementById(`${area.id}-circle`);
-
-      const checkHover = (e) => {
-        const mouseX = e.pageX;
-        const mouseY = e.pageY;
-
-        if (
-          mouseX >= area.left &&
-          mouseX <= area.left + area.width &&
-          mouseY >= area.top &&
-          mouseY <= area.top + area.height
-        ) {
-          circle.classList.add("active");
-        } else {
-          circle.classList.remove("active");
-        }
-      };
-
-      const handleClick = (e) => {
-        if (!circle.classList.contains("hidden")) {
-          const mouseX = e.pageX;
-          const mouseY = e.pageY;
-
-          if (
-            mouseX >= area.left &&
-            mouseX <= area.left + area.width &&
-            mouseY >= area.top &&
-            mouseY <= area.top + area.height
-          ) {
-            const categoryButton = document.querySelector(
-              `.category-button[data-category="${area.category}"]`
-            );
-            if (categoryButton) {
-              categoryButton.click();
-              removeAllListeners();
-            }
-          }
-        }
-      };
-
-      document.addEventListener("mousemove", checkHover);
-      document.addEventListener("click", handleClick);
-      hoverListeners.push(checkHover, handleClick);
-      circle.classList.remove("hidden");
-    });
-
-    // Hide the reset modal
     resetModal.classList.add("hidden");
+    forceResetToInitialState();
   });
 
   function updateBackgroundState(tasks, selectedCategory) {
@@ -765,35 +887,35 @@ document.addEventListener("DOMContentLoaded", () => {
       <h1 class="task-title">today's list</h1>
       <p class="task-subtitle">some tasks to help you feel good</p>
     `;
-    if (!document.querySelector(".mood-selector")) {
-      tasksContainer.style.position = "relative";
+    // if (!document.querySelector(".mood-selector")) {
+    //   tasksContainer.style.position = "relative";
 
-      const moodSelector = createMoodSelector();
-      tasksContainer.appendChild(moodSelector);
+    //   const moodSelector = createMoodSelector();
+    //   tasksContainer.appendChild(moodSelector);
 
-      chrome.storage.local.get("state", (data) => {
-        if (data.state && data.state.selectedMood) {
-          const moodOptions = [
-            { emoji: "😊", name: "Happy", value: "happy" },
-            { emoji: "😐", name: "Neutral", value: "neutral" },
-            { emoji: "😓", name: "Stressed", value: "stressed" },
-            { emoji: "😔", name: "Sad", value: "sad" },
-            { emoji: "😡", name: "Angry", value: "angry" }
-          ];
+    //   chrome.storage.local.get("state", (data) => {
+    //     if (data.state && data.state.selectedMood) {
+    //       const moodOptions = [
+    //         { emoji: "😊", name: "Happy", value: "happy" },
+    //         { emoji: "😐", name: "Neutral", value: "neutral" },
+    //         { emoji: "😓", name: "Stressed", value: "stressed" },
+    //         { emoji: "😔", name: "Sad", value: "sad" },
+    //         { emoji: "😡", name: "Angry", value: "angry" }
+    //       ];
 
-          const selectedMood = moodOptions.find(m => m.value === data.state.selectedMood);
+    //       const selectedMood = moodOptions.find(m => m.value === data.state.selectedMood);
 
-          if (selectedMood) {
-            const moodButton = document.querySelector(`.mood-option[data-mood="${selectedMood.value}"]`);
-            if (moodButton) {
-              moodButton.classList.add("selected");
-            }
+    //       if (selectedMood) {
+    //         const moodButton = document.querySelector(`.mood-option[data-mood="${selectedMood.value}"]`);
+    //         if (moodButton) {
+    //           moodButton.classList.add("selected");
+    //         }
 
-            updateCurrentMoodDisplay(selectedMood.emoji, selectedMood.name);
-          }
-        }
-      });
-    }
+    //         updateCurrentMoodDisplay(selectedMood.emoji, selectedMood.name);
+    //       }
+    // }
+    //   });
+    // }
     if (!document.getElementById("tasks-header")) {
       tasksContainer.innerHTML = "";
       tasksContainer.appendChild(tasksHeader);
